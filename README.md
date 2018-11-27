@@ -2,5 +2,5 @@
 　　环境安装，便捷脚本。
 
 使用方法：
-• curl -s https://git.oschina.net/ffeenn/linux/ysc/YscInstall.sh | sh
+• curl -s https://github.com/ffeenn/linux/blob/master/szy/YscInstall.sh| sh
 
