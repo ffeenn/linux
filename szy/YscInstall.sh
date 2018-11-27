@@ -88,3 +88,136 @@ else
 	echo 'wget Error!'
 	exit 1
 fi
+. lib/common.conf
+. lib/common.sh
+. lib/mysql.sh
+. lib/apache.sh
+. lib/nginx.sh
+. lib/php.sh
+. lib/na.sh
+. lib/libiconv.sh
+. lib/eaccelerator.sh
+. lib/zend.sh
+. lib/zendopc.sh
+. lib/pureftp.sh
+. lib/pcre.sh
+. lib/perl.sh
+. lib/mhash.sh
+. lib/mcrypt.sh
+. lib/memcached.sh
+. lib/redis.sh
+. lib/wdcp.sh
+. lib/wee.sh
+. lib/webconf.sh
+. lib/service.sh
+[ -d $IN_SRC ] || mkdir $IN_SRC
+[ -d $LOGPATH ] || mkdir $LOGPATH
+[ -d $INF ] || mkdir $INF
+SERVER="nginx"
+NGI_VER="1.4.7"
+MYS_VER="5.6.42"
+PHP_VER="7.1.23" && P7=1
+if [ $OS_RL == 2 ]; then
+    service apache2 stop 2>/dev/null
+    service mysql stop 2>/dev/null
+    service pure-ftpd stop 2>/dev/null
+    apt-get update
+    apt-get remove -y apache2 apache2-utils apache2.2-common apache2.2-bin \
+        apache2-mpm-prefork apache2-doc apache2-mpm-worker mysql-common \
+        mysql-client mysql-server php5 php5-fpm pure-ftpd pure-ftpd-common \
+        pure-ftpd-mysql 2>/dev/null
+    apt-get -y autoremove
+    [ -f /etc/mysql/my.cnf ] && mv /etc/mysql/my.cnf /etc/mysql/my.cnf.lanmpsave
+    apt-get install -y gcc g++ make autoconf libltdl-dev libgd2-xpm-dev \
+        libfreetype6 libfreetype6-dev libxml2-dev libjpeg-dev libpng12-dev \
+        libcurl4-openssl-dev libssl-dev patch libmcrypt-dev libmhash-dev \
+        libncurses5-dev  libreadline-dev bzip2 libcap-dev ntpdate \
+        diffutils exim4 iptables unzip sudo cmake re2c bison \
+        libicu-dev net-tools psmisc
+    if [ $X86 == 1 ]; then
+        ln -sf /usr/lib/x86_64-linux-gnu/libpng* /usr/lib/
+        ln -sf /usr/lib/x86_64-linux-gnu/libjpeg* /usr/lib/
+    else
+        ln -sf /usr/lib/i386-linux-gnu/libpng* /usr/lib/
+        ln -sf /usr/lib/i386-linux-gnu/libjpeg* /usr/lib/
+    fi
+else
+    [ ! -f $INF/dag.txt ] && rpm --import conf/RPM-GPG-KEY.dag.txt && touch $INF/dag.txt
+    [ $R6 == 1 ] && el="el6" || el="el5"
+    [ ! -f $INF/gcc.txt ] && yum install -y gcc gcc-c++ make sudo autoconf libtool-ltdl-devel gd-devel \
+        freetype-devel libxml2-devel libjpeg-devel libpng-devel openssl-devel \
+        curl-devel patch libmcrypt-devel libmhash-devel ncurses-devel bzip2 \
+        libcap-devel ntp sysklogd diffutils sendmail iptables unzip cmake wget logrotate \
+	re2c bison icu libicu libicu-devel net-tools psmisc vim-enhanced $iptables && touch $INF/gcc.txt
+    if [ $X86 == 1 ]; then
+        ln -sf /usr/lib64/libjpeg.so /usr/lib/
+        ln -sf /usr/lib64/libpng.so /usr/lib/
+    fi
+    ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
+    ntpdate tiger.sina.com.cn
+    hwclock -w
+fi
+
+
+if [ ! -d $IN_DIR ]; then
+    mkdir -p $IN_DIR/{etc,init.d,wdcp_bk/conf}
+    mkdir -p /www/web
+    if [ $OS_RL == 2 ]; then
+        /etc/init.d/apparmor stop >/dev/null 2>&1
+        update-rc.d -f apparmor remove >/dev/null 2>&1
+        apt-get remove -y apparmor apparmor-utils >/dev/null 2>&1
+        ogroup=$(awk -F':' '/x:1000:/ {print $1}' /etc/group)
+        [ -n "$ogroup" ] && groupmod -g 1010 $ogroup >/dev/null 2>&1
+        ouser=$(awk -F':' '/x:1000:/ {print $1}' /etc/passwd)
+        [ -n "$ouser" ] && usermod -u 1010 -g 1010 $ouser >/dev/null 2>&1
+        adduser --system --group --home /nonexistent --no-create-home mysql >/dev/null 2>&1
+    else
+        setenforce 0
+        sed -i 's/SELINUX=enforcing/SELINUX=disabled/g' /etc/selinux/config
+        service httpd stop >/dev/null 2>&1
+        service mysqld stop >/dev/null 2>&1
+        chkconfig --level 35 httpd off >/dev/null 2>&1
+        chkconfig --level 35 mysqld off >/dev/null 2>&1
+        chkconfig --level 35 sendmail off >/dev/null 2>&1
+	ogroup=$(awk -F':' '/x:1000:/ {print $1}' /etc/group)
+        [ -n "$ogroup" ] && groupmod -g 1010 $ogroup >/dev/null 2>&1
+        ouser=$(awk -F':' '/x:1000:/ {print $1}' /etc/passwd)
+        [ -n "$ouser" ] && usermod -u 1010 -g 1010 $ouser >/dev/null 2>&1
+        groupadd -g 27 mysql >/dev/null 2>&1
+        useradd -g 27 -u 27 -d /dev/null -s /sbin/nologin mysql >/dev/null 2>&1
+    fi
+    groupadd -g 1000 www >/dev/null 2>&1
+    useradd -g 1000 -u 1000 -d /dev/null -s /sbin/nologin www >/dev/null 2>&1
+fi
+
+cd $IN_SRC
+
+[ $IN_DIR = "/www/wdlinux" ] || IN_DIR_ME=1
+
+if [ $SERVER == "apache" ]; then
+    wget_down $HTTPD_DU
+elif [ $SERVER == "nginx" ]; then
+    wget_down $NGINX_DU $PHP_FPM $PCRE_DU
+fi
+if [ $X86 == "1" ]; then
+    wget_down $ZENDX86_DU
+else
+    wget_down $ZEND_DU
+fi
+wget_down $MYSQL_DU $PHP_DU $EACCELERATOR_DU $VSFTPD_DU $PHPMYADMIN_DU
+geturl
+mysql_ins
+if [ $SERVER == "nginx" ];then
+    NPD=${PHP_VER:0:1}${PHP_VER:2:1}
+    NPDS=${PHP_VER:0:1}${PHP_VER:1:1}${PHP_VER:2:1}
+    nginx_ins
+    libiconv_ins
+    [ -f /usr/include/mhash.h ] || mhash_ins
+    [ -f /usr/include/mcrypt.h ] || mcrypt_ins
+    sh ../lib/phps.sh $PHP_VER   
+    NPS=1
+fi
+pureftpd_ins
+wdcp_ins
+start_srv
+rm -f lanmp_v3.2.tar.gz
