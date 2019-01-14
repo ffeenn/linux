@@ -331,6 +331,9 @@ else
 fi
 
 echo -e "\033[40;32mStep 3.Begin to modify the source configration file and update.\n\033[40;37m"
+yum -y install wget
+apt-get install wget
+
 case "$os_release" in
 aliyun5)
   modify_aliyun5_yum
